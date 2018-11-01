@@ -1,0 +1,39 @@
+import pandas as pd
+import time
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.cross_validation import StratifiedKFold
+import split_data.data_process
+
+result = pd.DataFrame()
+begin_time = time.time()
+for i in range(4):
+    train, test = split_data.data_process.process()
+    train_X, test_X = train[i].drop(['实际功率', '实发辐照度', '时间'], axis=1).values, test[i].drop(['id', '时间'], axis=1).values
+    train_y = train[i]['实际功率'].values
+    res = test[i].loc[:, ['id']]
+
+    assert len(train_X) == len(train_y)
+
+    # random forest model
+
+    model_rf = RandomForestRegressor(random_state=1, n_estimators=20, min_samples_leaf=1, min_samples_split=2)
+    skf = list(StratifiedKFold(train_y, n_folds=5, shuffle=True, random_state=1024))
+
+    model_rf.fit(train_X, train_y)
+    test_pred = model_rf.predict(test_X)
+    res['prediction'] = test_pred
+
+    # 加权平均
+    res['predicition'] = 0
+    for i in range(5):
+        res['predicition'] += res['prob_%s' % str(i)]
+    res['predicition'] = res['predicition'] / 5
+    result = result.append(res)
+
+mean = result['prediction'].mean()
+print('mean:', mean)
+now = time.localtime(time.time())
+now = time.strftime('%H-%M', now)
+result[['id', 'prediction']].to_csv("./result/baseline_%s.csv" % now, index=False)
+
+print('that is all, cost time：{}'.format(time.time() - begin_time))
